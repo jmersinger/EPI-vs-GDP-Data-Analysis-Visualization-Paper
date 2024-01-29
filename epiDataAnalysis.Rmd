@@ -1,8 +1,6 @@
 ---
 title: "epiDataAnalysis"
-output: 
-  html_document:
-    keep_md: true
+output: github_document
     css: styles.css
 date: "2023-11-30"
 ---
