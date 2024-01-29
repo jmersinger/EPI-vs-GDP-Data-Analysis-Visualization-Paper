@@ -1,1 +1,2 @@
-*.rmd linguist-language=R
+$ cat .gitattributes
+*.rb linguist-language=R
