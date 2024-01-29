@@ -1,0 +1,801 @@
+---
+title: "epiDataAnalysis"
+output: 
+  html_document:
+    css: styles.css
+date: "2023-11-30"
+---
+
+```{r libraries}
+library(haven)
+library(dplyr)
+library(stargazer)
+library(readxl)
+library(corrplot)
+library(tidyverse)
+library(car)
+library(ggplot2)
+library(summarytools)
+library(knitr)
+library(kableExtra)
+```
+
+```{r openFiles}
+setwd("Data")
+
+#EPI DATA
+epi12 <- read_excel("2012-epi.xls")
+epi14 <- read_excel("2014-epi.xls")
+epi16 <- read_excel("2016-epi.xlsx")
+epi18 <- read_excel("2018-epi.xlsx")
+
+#GDP Data
+gdp <- read.csv("gdp.csv")
+gdpPerCapita <- read.csv("gdpPerCap.csv")
+
+#Control Variables
+avgSchool <- read.csv("avgSchooling.csv")
+corruptionDta <- read.csv("corruption.csv")
+tradeBal <- read.csv("tradeBalance.csv")
+enrgConsum <- read.csv("energy.csv")
+govSpend <- read.csv("govSpending.csv")
+pressFree <- read.csv("pressFreedom.csv")
+unempRate <- read.csv("unemployment.csv")
+```
+
+
+```{r estTimeRage}
+#Establich Time Range (except corruptionDta)
+avgSchool <- filter(avgSchool, avgSchool$Year >= 2014 & avgSchool$Year <= 2018)
+tradeBal <- filter(tradeBal, tradeBal$Year >= 2014 & tradeBal$Year <= 2018)
+enrgConsum <- filter(enrgConsum, enrgConsum$Year >= 2014 & enrgConsum$Year <= 2018)
+govSpend <- filter(govSpend, govSpend$Year >= 2014 & govSpend$Year <= 2018)
+pressFree <- filter(pressFree, pressFree$Year >= 2014 & pressFree$Year <= 2018)
+unempRate <- filter(unempRate, unempRate$Year >= 2014 & unempRate$Year <= 2018)
+gdp <- filter(gdp, gdp$Year >= 2014 & gdp$Year <= 2018)
+gdpPerCapita <- filter(gdpPerCapita, gdpPerCapita$Year >= 2014 & gdpPerCapita$Year <= 2018)
+```
+
+
+```{r elimUniqCountries}
+#Eliminate unique countries
+epi12 <- filter(epi12, epi12$Country %in% epi14$Country)
+epi12 <- filter(epi12, epi12$Country %in% epi16$Country)
+epi12 <- filter(epi12, epi12$Country %in% epi18$Country)
+epi12 <- filter(epi12, epi12$Country %in% avgSchool$Entity)
+epi12 <- filter(epi12, epi12$Country %in% corruptionDta$Entity)
+epi12 <- filter(epi12, epi12$Country %in% tradeBal$Entity)
+epi12 <- filter(epi12, epi12$Country %in% enrgConsum$Country)
+epi12 <- filter(epi12, epi12$Country %in% govSpend$Entity)
+epi12 <- filter(epi12, epi12$Country %in% pressFree$Entity)
+epi12 <- filter(epi12, epi12$Country %in% unempRate$Entity)
+epi12 <- filter(epi12, epi12$Country %in% gdp$Entity)
+epi12 <- filter(epi12, epi12$Country %in% gdpPerCapita$Entity)
+
+
+epi14 <- filter(epi14, epi14$Country %in% epi12$Country)
+epi16 <- filter(epi16, epi16$Country %in% epi12$Country)
+epi18 <- filter(epi18, epi18$Country %in% epi12$Country)
+avgSchool <- filter(avgSchool, avgSchool$Entity %in% epi12$Country)
+corruptionDta <- filter(corruptionDta, corruptionDta$Entity %in% epi12$Country)
+tradeBal <- filter(tradeBal, tradeBal$Entity %in% epi12$Country)
+enrgConsum <- filter(enrgConsum, enrgConsum$Country %in% epi12$Country)
+govSpend <- filter(govSpend, govSpend$Entity %in% epi12$Country)
+pressFree <- filter(pressFree, pressFree$Entity %in% epi12$Country)
+unempRate <- filter(unempRate, unempRate$Entity %in% epi12$Country)
+gdp <- filter(gdp, gdp$Entity %in% epi12$Country)
+gdpPerCapita <- filter(gdpPerCapita, gdpPerCapita$Entity %in% epi12$Country)
+
+# enrgConsum <- filter(enrgConsum, enrgConsum$allEnergyNotRenewable != -1)
+```
+
+
+```{r tmpDFs}
+#Tmp DataFrames for Processing
+tmpGdp <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  gdp = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpLogGdp <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  log.gdp = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpGdpPerCap <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  gdpPerCapita = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpEdu <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varEdu = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpTrade <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varTrade = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpPress <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varPress = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpUnemp <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varUnemp = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpGdp2 <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  gdp2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpGov <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varGov = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpCorup <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varCorup = numeric(),
+  stringsAsFactors = FALSE
+)
+
+tmpEnerg <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  varEnerg = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# mainDta <- data.frame(
+#   Entity = character(),
+#   Year = integer(),
+#   gdp = numeric(),
+#   gdpPerCapita() = numeric(),
+#   varEdu = numeric(),
+#   varCorup = numeric(),
+#   varTrade = numeric(),
+#   varEnerg = numeric(),
+#   varGov = numeric(),
+#   varPress = numeric(),
+#   varUnemp = numeric(),
+#   stringsAsFactors = FALSE
+# )
+```
+
+```{r gdp}
+for (entity in unique(gdp$Entity)) {
+  entityDta <- subset(gdp, Entity == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      gdp = entityDta$GDP
+    )
+    tmpGdp <- rbind(tmpGdp, summaryDta)
+  }
+}
+```
+
+```{r log(gdp)}
+for (entity in unique(gdp$Entity)) {
+  entityDta <- subset(gdp, Entity == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      log.gdp = log(entityDta$GDP)
+    )
+    tmpLogGdp <- rbind(tmpLogGdp, summaryDta)
+  }
+}
+
+tmpGdp <- filter(tmpGdp, tmpGdp$Entity %in% tmpLogGdp$Entity)
+tmpLogGdp <- filter(tmpLogGdp, tmpLogGdp$Entity %in% tmpGdp$Entity)
+mainDta <- merge(tmpGdp, tmpLogGdp, by = c("Entity", "Year"), all = TRUE)
+
+```
+
+
+```{r gdpPerCapita}
+for (entity in unique(gdpPerCapita$Entity)) {
+  entityDta <- subset(gdpPerCapita, Entity == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      gdpPerCapita = entityDta$GDPPerCap
+    )
+    tmpGdpPerCap <- rbind(tmpGdpPerCap, summaryDta)
+  }
+}
+
+tmpGdpPerCap <- filter(tmpGdpPerCap, tmpGdpPerCap$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpGdpPerCap$Entity)
+mainDta <- merge(mainDta, tmpGdpPerCap, by = c("Entity", "Year"), all = TRUE)
+
+mainDta <- mainDta %>%
+  mutate(
+    population = gdp/gdpPerCapita,
+  )
+
+mainDta <- mainDta %>%
+  mutate(
+    log.population = log(population),
+  )
+
+
+```
+
+```{r epi}
+epi14 <- filter(epi14, epi14$Country %in% epi16$Country)
+epi14 <- filter(epi14, epi14$Country %in% epi18$Country)
+epi14 <- filter(epi14, epi14$Country %in% mainDta$Entity)
+
+epi16 <- filter(epi16, epi16$Country %in% epi14$Country)
+epi18 <- filter(epi18, epi18$Country %in% epi14$Country)
+mainDta <- filter(mainDta, mainDta$Entity %in% epi14$Country)
+
+df14 <- data.frame(Entity = unique(epi14$Country), Year = 2014, EPI = epi14$`2014 EPI Score`)
+df15 <- data.frame(Entity = unique(epi14$Country), Year = 2015, EPI = (epi14$`2014 EPI Score`+epi16$EPI)/2)
+df16 <- data.frame(Entity = unique(epi16$Country), Year = 2016, EPI = epi16$EPI)
+df17 <- data.frame(Entity = unique(epi16$Country), Year = 2017, EPI = (epi16$EPI+epi18$EPI)/2)
+df18 <- data.frame(Entity = unique(epi18$Country), Year = 2018, EPI = epi18$EPI)
+
+allEPIDta <- data.frame(
+  Entity = character(),
+  Year = integer(),
+  EPI = numeric()
+)
+
+allEPIDta <- merge(df14, df15, by = c("Entity", "Year", "EPI"), all = TRUE)
+allEPIDta <- merge(allEPIDta, df16, by = c("Entity", "Year", "EPI"), all = TRUE)
+allEPIDta <- merge(allEPIDta, df17, by = c("Entity", "Year", "EPI"), all = TRUE)
+allEPIDta <- merge(allEPIDta, df18, by = c("Entity", "Year", "EPI"), all = TRUE)
+mainDta <- merge(mainDta, allEPIDta, by = c("Entity", "Year"), all = TRUE)
+
+
+```
+
+
+```{r varEdu}
+#Process varEdu
+for (entity in unique(avgSchool$Entity)) {
+  entityDta <- subset(avgSchool, Entity == entity)
+  
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varEdu = entityDta$Mean.years.of.schooling
+    )
+    tmpEdu <- rbind(tmpEdu, summaryDta)
+  }
+}
+tmpEdu <- filter(tmpEdu, tmpEdu$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpEdu$Entity)
+mainDta <- merge(mainDta, tmpEdu, by = c("Entity", "Year"), all = TRUE)
+```
+
+
+```{r varTrade}
+#Process varTrade
+for (entity in unique(tradeBal$Entity)) {
+
+  entityDta <- filter(tradeBal, Entity == entity)
+  
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varTrade = entityDta$tradeBalGDP
+    )
+    tmpTrade <- rbind(tmpTrade, summaryDta)
+  }
+}
+
+
+tmpTrade <- filter(tmpTrade, tmpTrade$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpTrade$Entity)
+mainDta <- merge(mainDta, tmpTrade, by = c("Entity", "Year"), all = TRUE)
+```
+
+
+```{r varPress}
+# Process varPress
+for (entity in unique(pressFree$Entity)) {
+
+  entityDta <- filter(pressFree, Entity == entity)
+  
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varPress = entityDta$Press.Freedom.Score
+    )
+    tmpPress <- rbind(tmpPress, summaryDta)
+  }
+}
+
+tmpPress <- filter(tmpPress, tmpPress$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpPress$Entity)
+mainDta <- merge(mainDta, tmpPress, by = c("Entity", "Year"), all = TRUE)
+```
+
+
+```{r varUnemp}
+# Process varUnemp
+for (entity in unique(unempRate$Entity)) {
+
+  entityDta <- filter(unempRate, Entity == entity)
+  
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varUnemp = entityDta$Unemployment..total....of.total.labor.force...modeled.ILO.estimate.
+    )
+    tmpUnemp <- rbind(tmpUnemp, summaryDta)
+  }
+}
+
+tmpUnemp <- filter(tmpUnemp, tmpUnemp$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpUnemp$Entity)
+mainDta <- merge(mainDta, tmpUnemp, by = c("Entity", "Year"), all = TRUE)
+```
+
+
+```{r varGov}
+#Process varGov
+
+
+
+for (entity in unique(govSpend$Entity)) {
+  entityDta <- subset(govSpend, Entity == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varGov = entityDta$X
+    )
+    tmpGov <- rbind(tmpGov, summaryDta)
+  }
+}
+
+tmpGov <- filter(tmpGov, tmpGov$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpGov$Entity)
+mainDta <- merge(mainDta, tmpGov, by = c("Entity", "Year"), all = TRUE)
+
+```
+
+
+```{r varCorup}
+modCorupDta <- corruptionDta %>%
+  gather(key = "Year", value = "Value", -Entity) %>%
+  mutate(Year = as.integer(sub("X", "", Year)))
+modCorupDta <- filter(modCorupDta, modCorupDta$Year >= 2014 & modCorupDta$Year <= 2018)
+
+for (entity in unique(modCorupDta$Entity)) {
+  entityDta <- subset(modCorupDta, Entity == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varCorup = entityDta$Value
+    )
+    tmpCorup <- rbind(tmpCorup, summaryDta)
+  }
+}
+
+tmpCorup <- filter(tmpCorup, tmpCorup$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpCorup$Entity)
+mainDta <- merge(mainDta, tmpCorup, by = c("Entity", "Year"), all = TRUE)
+
+
+```
+
+
+```{r varEnerg}
+enrgConsum <- filter(enrgConsum, enrgConsum$allEnergyNotRenewable != -1)
+
+for (entity in unique(enrgConsum$Country)) {
+  entityDta <- subset(enrgConsum, Country == entity)
+  minYear <- min(entityDta$Year)
+  maxYear <- max(entityDta$Year)
+  
+  if (minYear == 2014 && maxYear == 2018) {
+    summaryDta <- data.frame(
+      Entity = entity,
+      Year = entityDta$Year,
+      varEnerg = entityDta$allEnergyNotRenewable
+    )
+    tmpEnerg <- rbind(tmpEnerg, summaryDta)
+  }
+}
+
+tmpEnerg <- filter(tmpEnerg, tmpEnerg$Entity %in% mainDta$Entity)
+mainDta <- filter(mainDta, mainDta$Entity %in% tmpEnerg$Entity)
+mainDta <- merge(mainDta, tmpEnerg, by = c("Entity", "Year"), all = TRUE)
+
+
+
+```
+
+
+
+```{r correlations}
+crossSection18 <- filter(mainDta, mainDta$Year == 2018)
+multicoMatrix <- crossSection18[c("log.gdp", "EPI", "varEdu", "varTrade", "varPress", "varUnemp", "varGov", "varCorup", "varEnerg")]
+multicoMatrixPerCap <- crossSection18[c("gdpPerCapita", "EPI", "varEdu", "varTrade", "varPress", "varUnemp", "varGov", "varCorup", "varEnerg")]
+
+corrMatrix1 <- cor(multicoMatrix)
+corrplot(corrMatrix1, method="color", type="upper", addCoef.col = "black")
+
+corrMatrix2 <- cor(multicoMatrixPerCap)
+corrplot(corrMatrix2, method="color", addCoef.col = "black", tl.col="black")
+
+# VIF
+regressionVIF <- lm(gdp~EPI+varEdu+varTrade+varPress+varUnemp+varCorup+varEnerg, data=mainDta)
+vifValues1 <- vif(regressionVIF)
+
+print(vifValues1)
+
+regressionVIFPerCap <- lm(gdpPerCapita~EPI+varEdu+varTrade+varPress+varUnemp+varGov+varCorup+varEnerg, data=mainDta)
+summary(regressionVIFPerCap)
+vifValues2 <- vif(regressionVIFPerCap)
+
+stargazer(vifValues2, type = "text")
+
+
+```
+
+```{r panelDtaRegression}
+panelDta <- filter(mainDta, mainDta$Year == 2014 | mainDta$Year == 2018) %>%
+  group_by(Entity) %>%
+  mutate(
+    Country = Entity,
+    gdpMeanGrowth = ifelse(Year == "2018", diff(gdpPerCapita[Year %in% 2014:2018])/gdpPerCapita, 0),
+    epiMeanGrowth = ifelse(Year == "2018", diff(EPI[Year %in% 2014:2018])/gdpPerCapita, 0),
+    tradeMeanGrowth = ifelse(Year == "2018", diff(varTrade[Year %in% 2014:2018])/gdpPerCapita, 0),
+    unempMeanGrowth = ifelse(Year == "2018", diff(varUnemp[Year %in% 2014:2018])/gdpPerCapita, 0),
+    govMeanGrowth = ifelse(Year == "2018", diff(varGov[Year %in% 2014:2018])/gdpPerCapita, 0),
+    corupMeanGrowth = ifelse(Year == "2018", diff(varCorup[Year %in% 2014:2018])/gdpPerCapita, 0),
+    energMeanGrowth = ifelse(Year == "2018", diff(varEnerg[Year %in% 2014:2018])/gdpPerCapita, 0),
+    eduMeanGrowth = ifelse(Year == "2018", diff(varEdu[Year %in% 2014:2018])/gdpPerCapita, 0),
+    pressMeanGrowth = ifelse(Year == "2018", diff(varPress[Year %in% 2014:2018])/gdpPerCapita, 0),
+  ) %>%
+  select(
+    ends_with("MeanGrowth")
+  ) %>%
+  ungroup(Entity)
+panelDta <- filter(panelDta, panelDta$gdpMeanGrowth != "0")
+
+panelRegress1 <- lm(gdpMeanGrowth~epiMeanGrowth, data = panelDta); 
+panelRegress2 <- lm(gdpMeanGrowth~epiMeanGrowth+pressMeanGrowth, data = panelDta);
+panelRegress3 <- lm(gdpMeanGrowth~epiMeanGrowth+pressMeanGrowth+tradeMeanGrowth, data = panelDta); 
+panelRegress4 <- lm(gdpMeanGrowth~epiMeanGrowth+pressMeanGrowth+tradeMeanGrowth+unempMeanGrowth, data = panelDta); 
+stargazer(panelRegress1, panelRegress2, panelRegress3, panelRegress4, type="html")
+
+
+
+```
+
+
+```{r regressions}
+crossSection18 <- filter(mainDta, mainDta$Year == 2018)
+
+
+regression1 <- lm((gdpPerCapita/1000)~EPI, data = crossSection18);
+regression2 <- lm((gdpPerCapita/1000)~EPI+varPress, data = crossSection18);
+regression3 <- lm((gdpPerCapita/1000)~EPI+varPress+varTrade, data = crossSection18);
+regression4 <- lm((gdpPerCapita/1000)~EPI+varPress+varTrade+varUnemp, data = crossSection18);
+
+
+
+
+stargazer(regression1, regression2, regression3, regression4, type = "text")
+# stargazer(regression01, regression02, regression03, regression04, type = "text")
+
+# regression2 <- lm(gdp~EPI+varUnemp+varTrade+varPress, data = crossSection18unDev); summary(regression2)
+# stargazer(regression2, type = "text")
+#
+# regression2 <- lm(crossSection18$gdp~crossSection18$EPI+crossSection18$varGov+crossSection18$varEnerg); summary(regression1)
+# stargazer(regression2, type = "text")
+plot(
+  crossSection18$EPI,
+  crossSection18$gdpPerCapita,
+  pch = 16, cex = 0.5,
+  xlab = "EPI", ylab = "GDP Per Capita",
+)
+
+
+
+
+```
+<table style="text-align:center"><tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td colspan="4"><em>Dependent variable:</em></td></tr>
+<tr><td></td><td colspan="4" style="border-bottom: 1px solid black"></td></tr>
+<tr><td style="text-align:left"></td><td colspan="4">(gdpPerCapita)</td></tr>
+<tr><td style="text-align:left"></td><td>(1)</td><td>(2)</td><td>(3)</td><td>(4)</td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">EPI</td><td>1.245<sup>***</sup></td><td>1.219<sup>***</sup></td><td>1.085<sup>***</sup></td><td>1.070<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.102)</td><td>(0.120)</td><td>(0.116)</td><td>(0.116)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">varPress</td><td></td><td>-0.051</td><td>-0.112</td><td>-0.130</td></tr>
+<tr><td style="text-align:left"></td><td></td><td>(0.124)</td><td>(0.115)</td><td>(0.116)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">varTrade</td><td></td><td></td><td>0.828<sup>***</sup></td><td>0.805<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td>(0.198)</td><td>(0.198)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">varUnemp</td><td></td><td></td><td></td><td>-0.295</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td>(0.260)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Constant</td><td>-49.404<sup>***</sup></td><td>-46.354<sup>***</sup></td><td>-35.629<sup>***</sup></td><td>-32.153<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(6.289)</td><td>(9.781)</td><td>(9.389)</td><td>(9.865)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Observations</td><td>99</td><td>99</td><td>99</td><td>99</td></tr>
+<tr><td style="text-align:left">R<sup>2</sup></td><td>0.605</td><td>0.606</td><td>0.667</td><td>0.672</td></tr>
+<tr><td style="text-align:left">Adjusted R<sup>2</sup></td><td>0.601</td><td>0.598</td><td>0.657</td><td>0.658</td></tr>
+<tr><td style="text-align:left">Residual Std. Error</td><td>13.717 (df = 97)</td><td>13.776 (df = 96)</td><td>12.723 (df = 95)</td><td>12.704 (df = 94)</td></tr>
+<tr><td style="text-align:left">F Statistic</td><td>148.759<sup>***</sup> (df = 1; 97)</td><td>73.824<sup>***</sup> (df = 2; 96)</td><td>63.553<sup>***</sup> (df = 3; 95)</td><td>48.127<sup>***</sup> (df = 4; 94)</td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td colspan="4" style="text-align:right"><sup>*</sup>p<0.1; <sup>**</sup>p<0.05; <sup>***</sup>p<0.01</td></tr>
+</table>
+
+
+```{r dataSummaryTable}
+
+nrow(crossSection18)
+
+
+summaryVar <- c("EPI", "varPress", "varTrade", "varUnemp")
+
+dtaSummary <- crossSection18 %>%
+  select(all_of(summaryVar)) %>%
+  pivot_longer(cols = everything(), names_to = "variable") %>%
+  group_by(variable) %>%
+  summarize(
+    N = nrow(crossSection18),
+    Mean = mean(value, na.rm = TRUE),
+    St.Dev. = sd(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE)
+  )
+
+
+
+kable(dtaSummary, format = "html") %>%
+  kable_styling(full_width = FALSE)
+
+plot(
+  crossSection18$EPI,
+  crossSection18$gdpPerCapita,
+  pch = 16, cex = 0.5,
+  xlab = "EPI", ylab = "GDP Per Capita",
+)
+
+
+```
+
+
+ 
+
+ 
+ 
+ <table style="text-align:center"><tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td colspan="4"><em>Dependent variable:</em></td></tr>
+<tr><td></td><td colspan="4" style="border-bottom: 1px solid black"></td></tr>
+<tr><td style="text-align:left"></td><td colspan="4">gdpMeanGrowth</td></tr>
+<tr><td style="text-align:left"></td><td>(1)</td><td>(2)</td><td>(3)</td><td>(4)</td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">epiMeanGrowth</td><td>-2.402</td><td>-2.702</td><td>1.300</td><td>5.050</td></tr>
+<tr><td style="text-align:left"></td><td>(4.427)</td><td>(4.422)</td><td>(4.957)</td><td>(4.988)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">pressMeanGrowth</td><td></td><td>14.605</td><td>22.250<sup>*</sup></td><td>23.172<sup>*</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td>(11.953)</td><td>(12.639)</td><td>(12.233)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">tradeMeanGrowth</td><td></td><td></td><td>-21.727<sup>*</sup></td><td>-20.894<sup>*</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td>(12.623)</td><td>(12.216)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">unempMeanGrowth</td><td></td><td></td><td></td><td>-103.602<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td>(37.842)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Constant</td><td>0.083<sup>***</sup></td><td>0.081<sup>***</sup></td><td>0.081<sup>***</sup></td><td>0.077<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.009)</td><td>(0.009)</td><td>(0.009)</td><td>(0.009)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td><td></td><td></td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Observations</td><td>99</td><td>99</td><td>99</td><td>99</td></tr>
+<tr><td style="text-align:left">R<sup>2</sup></td><td>0.003</td><td>0.018</td><td>0.048</td><td>0.118</td></tr>
+<tr><td style="text-align:left">Adjusted R<sup>2</sup></td><td>-0.007</td><td>-0.002</td><td>0.018</td><td>0.081</td></tr>
+<tr><td style="text-align:left">Residual Std. Error</td><td>0.079 (df = 97)</td><td>0.079 (df = 96)</td><td>0.078 (df = 95)</td><td>0.075 (df = 94)</td></tr>
+<tr><td style="text-align:left">F Statistic</td><td>0.294 (df = 1; 97)</td><td>0.894 (df = 2; 96)</td><td>1.596 (df = 3; 95)</td><td>3.153<sup>**</sup> (df = 4; 94)</td></tr>
+<tr><td colspan="5" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td colspan="4" style="text-align:right"><sup>*</sup>p<0.1; <sup>**</sup>p<0.05; <sup>***</sup>p<0.01</td></tr>
+</table>
+
+```{r PowerPoint Graphics}
+# The following chunks were added after the paper was finished, to compress the data analysis code to a single file
+# This is because the PowerPoint graphics were generated in a separate .rmd file
+```
+
+
+```{r importPPFile}
+setwd("Data")
+carbonEmissData <- read.csv("carbonEmissions.csv")
+```
+
+```{r prelimDtaAna}
+carbonDta2021 <- filter(carbonEmissData, carbonEmissData$Year == "2018")
+carbonDta2021 <- filter(carbonDta2021, carbonDta2021$Entity != "World")
+carbonDta2021 <- filter(carbonDta2021, carbonDta2021$Anunual.CO2.Emissions != "0")
+carbonDta2021 <- filter(carbonDta2021, carbonDta2021$Code != "")
+
+carbonDtaUS <- filter(carbonEmissData, carbonEmissData$Code == "USA")
+carbonDtaUS <- filter(carbonDtaUS, carbonDtaUS$Year >= 1800)
+carbonDtaUS <- filter(carbonDtaUS, carbonDtaUS$Year <= 2018)
+
+# PPT Figure 1
+par(bg="#0D0D0D")
+plot(
+  carbonDta2021$GDP.per.capita, carbonDta2021$Annual.CO2.emissions.per.capita,
+  col = "#ED7D31", pch = 16, cex = 0.5,
+  xlab = "GDP Per Capita", ylab = "Per Capita Emissions",
+  col.axis="white", col.lab="white", col.main = "white"
+  )
+box(col="white")
+axis(1, col = "white", col.axis="white")
+axis(2, col = "white", col.axis="white")
+ text(carbonDta2021$GDP.per.capita[161], carbonDta2021$Annual.CO.emissions.per.capita.[161], carbonDta2021$Entity[161], cex= 0.7, pos=1, col = "#ED7D31")
+ text(carbonDta2021$GDP.per.capita[200], carbonDta2021$Annual.CO.emissions.per.capita.[200], carbonDta2021$Entity[200], cex= 0.7, pos=1, col = "#ED7D31")
+ text(carbonDta2021$GDP.per.capita[208], carbonDta2021$Annual.CO.emissions.per.capita.[208], "UAE", cex= 0.7, pos=1, col = "#ED7D31")
+ text(carbonDta2021$GDP.per.capita[210], carbonDta2021$Annual.CO.emissions.per.capita.[210], "USA", cex= 0.7, pos=1, col = "#ED7D31")
+ text(carbonDta2021$GDP.per.capita[149], carbonDta2021$Annual.CO.emissions.per.capita.[149], carbonDta2021$Entity[149], cex= 0.7, pos=1, col = "#ED7D31")
+ text(carbonDta2021$GDP.per.capita[41], carbonDta2021$Annual.CO.emissions.per.capita.[41], carbonDta2021$Entity[41], cex= 0.7, pos=1, col = "#ED7D31")
+
+regressionWorld <- lm(Annual.CO2.emissions.per.capita ~ GDP.per.capita, data = carbonDta2021)
+abline(regressionWorld, col="white")
+text(115000, 35, "y = 2.198e-04x + 5.784e-01", cex= 0.7, pos=1, col="white")
+text(115000, 32.5, "R^2 = 0.6284", cex= 0.7, pos=1, col="white")
+
+# PPT Figure 2
+par(bg="#0D0D0D")
+plot(
+  log(carbonDtaUS$GDP), carbonDtaUS$Anunual.CO2.Emissions,
+  # type = "o",
+  col = "#ED7D31", pch = 16, cex = 0.5,
+  xlab = "log(GDP)", ylab = "CO2 Emissions in Tonnes per Year",
+  col.axis="white", col.lab="white", col.main = "white"
+  )
+box(col="white")
+axis(1, col = "white", col.axis="white")
+axis(2, col = "white", col.axis="white")
+ # text(carbonDtaUS$GDP, carbonDtaUS$Anunual.CO2.Emissions, carbonDtaUS$Year, cex= 0.7, pos=1)
+ text(carbonDtaUS$GDP[180], carbonDtaUS$Anunual.CO2.Emissions[180], carbonDtaUS$Year[180], cex= 0.7, pos=3, col = "#ED7D31")
+ text(carbonDtaUS$GDP[208], carbonDtaUS$Anunual.CO2.Emissions[208], carbonDtaUS$Year[208], cex= 0.7, pos=4, col = "#ED7D31")
+ 
+ regressionUS <- lm(Anunual.CO2.Emissions ~ log(GDP), data =carbonDtaUS)
+ summary(regressionUS)
+ abline(regressionUS, col="white")
+ text(26, 6.275e+08+3.996e-04*carbonDtaUS$GDP[178]+100000000, "y = 3.996e-04x + 6.275e+08", cex= 0.7, pos=4, col="white")
+ text(26.5, 6.275e+08+3.996e-04*carbonDtaUS$GDP[173]+100000000, "R^2 = 0.8286", cex= 0.7, pos=4, col="white")
+
+```
+
+```{r pptRegs}
+setwd("Data")
+gdpDtaEPI <- filter(carbonEmissData, carbonEmissData$Year == "2016" | carbonEmissData$Year == "2018")
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Anunual.CO2.Emissions != "0")
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$GDP.per.capita != "0")
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Code != "")
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Entity != "Kosovo")
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Entity != "World")
+
+gdpDtaEPI <- gdpDtaEPI %>%
+  group_by(Entity) %>%
+  mutate(
+    meanGDPGrowth = ifelse(Year == "2018", diff(GDP[Year %in% 2016:2018])/2, 0),
+    # .keep = "unused"
+  ) %>%
+  ungroup(Entity)
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$meanGDPGrowth != "0")
+
+epi12 <- read_excel("2012-epi.xls")
+epi14 <- read_excel("2014-epi.xls")
+epi16 <- read_excel("2016-epi.xlsx")
+epi18 <- read_excel("2018-epi.xlsx")
+
+epi12 <- filter(epi12, epi12$Country %in% epi12$Country)
+epi12 <- filter(epi12, epi12$Country %in% epi14$Country)
+epi12 <- filter(epi12, epi12$Country %in% epi16$Country)
+epi12 <- filter(epi12, epi12$Country %in% epi18$Country)
+epi12 <- filter(epi12, epi12$Country %in% gdpDtaEPI$Entity)
+
+epi14 <- filter(epi14, epi14$Country %in% epi12$Country)
+epi16 <- filter(epi16, epi16$Country %in% epi12$Country)
+epi18 <- filter(epi18, epi18$Country %in% epi12$Country)
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Entity %in% epi12$Country)
+
+epiOverTime <- data.frame(
+  Country = 1:145,
+  epi16 = 1:145,
+  epi20 = 1:145
+)
+
+epiOverTime$Country <- epi16$Country
+epiOverTime$epi16 <- epi16$EPI
+epiOverTime$epi18 <- epi18$EPI
+
+epiOverTime <- epiOverTime %>%
+  mutate(
+    meanEPIGrowth = (epi18 - epi16)/2
+  )
+
+# PPT Table 1
+gdpDta18 <- filter(carbonEmissData, carbonEmissData$Year == 2018)
+gdpDta18 <- filter(gdpDta18, gdpDta18$Anunual.CO2.Emissions != "0")
+gdpDta18 <- filter(gdpDta18, gdpDta18$GDP.per.capita != "0")
+gdpDta18 <- filter(gdpDta18, gdpDta18$Code != "")
+gdpDta18 <- filter(gdpDta18, gdpDta18$Entity != "Kosovo")
+gdpDta18 <- filter(gdpDta18, gdpDta18$Entity != "World")
+
+gdpDta18 <- filter(gdpDta18, gdpDta18$Entity %in% epiOverTime$Country)
+epiOverTime <- filter(epiOverTime, epiOverTime$Country %in% gdpDta18$Entity)
+
+regression18 <- lm(gdpDta18$GDP.per.capita ~ epiOverTime$epi18); summary(regression18)
+
+stargazer(regression18, type = "text")
+
+# PPT Table 2
+gdpDtaEPI <- filter(gdpDtaEPI, gdpDtaEPI$Entity %in% epiOverTime$Country)
+epiOverTime <- filter(epiOverTime, epiOverTime$Country %in% gdpDtaEPI$Entity)
+
+regressionEPIGDP <- lm(gdpDtaEPI$meanGDPGrowth ~ epiOverTime$meanEPIGrowth)
+summary(regressionEPIGDP)
+stargazer(regressionEPIGDP, type = "text")
+
+```
+
+
+
