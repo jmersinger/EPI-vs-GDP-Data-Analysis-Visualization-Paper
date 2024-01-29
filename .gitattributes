@@ -1,1 +1,2 @@
 *.rmd linguist-language=R
+*.css linguist-language=CSS
