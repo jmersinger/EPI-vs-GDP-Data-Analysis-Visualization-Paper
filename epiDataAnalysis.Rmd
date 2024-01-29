@@ -2,6 +2,7 @@
 title: "epiDataAnalysis"
 output: 
   html_document:
+    keep_md: true
     css: styles.css
 date: "2023-11-30"
 ---
